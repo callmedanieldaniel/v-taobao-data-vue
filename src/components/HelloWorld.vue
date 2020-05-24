@@ -1,5 +1,8 @@
 <template>
   <div class="hello">
+    <a-radio-group v-model="rootId" @change="onIdTypeChange">
+      <a-radio-button v-for="id in Object.keys(idTypes)" :value="id" :key="id">{{idTypes[id]}}</a-radio-button>
+    </a-radio-group>
     <download-csv
       :fields="validFields"
       class="btn btn-default"
@@ -25,6 +28,7 @@
           :tab="`${time.start}-${time.end}`"
         ></a-tab-pane>
       </a-tabs>-->
+
       <a-radio-group v-model="activeKey" @change="onChange">
         <a-radio
           v-for="time in times"
@@ -44,11 +48,6 @@ import dayjs from "dayjs";
 import Table from "./Table.vue";
 const { Parser } = require("json2csv");
 
-const idTypes = {
-  95: "直播",
-  100: "短视频"
-};
-
 export default {
   name: "Index",
   components: {
@@ -56,6 +55,10 @@ export default {
   },
   data() {
     return {
+      idTypes: {
+        95: "直播",
+        100: "短视频"
+      },
       rootId: 95, //直播美食95， 短视频美食100
       activeKey: "",
       times: [],
@@ -103,12 +106,16 @@ export default {
         let end = dayjs(list[list.length - 1].endTime).format("YYYY/MM/DD");
         timeDesc = `${start}-${end}`;
       }
-      return `${idTypes[this.rootId]}美食博主${timeDesc}.csv`;
+      return `${this.idTypes[this.rootId]}美食博主${timeDesc}.csv`;
     }
   },
   methods: {
-    onChange(e){
-      this.onTabClick(e.target.value)
+    onChange(e) {
+      this.onTabClick(e.target.value);
+    },
+    onIdTypeChange(e) {
+      this.rootId = e.target.value;
+      this.getTimes(this.rootId);
     },
     onTabClick(key) {
       // const t = this.times.filter(t => (this.activeKey = t.count))[0];
@@ -126,34 +133,27 @@ export default {
         })
         .join("&");
     },
-    getTimes(id) {
-      //获取可用分析时间段
+    getTimes(id) { //获取可用来分析的时间段
       const self = this;
       const url = `http://tbd.wshang.com/api/list/publishdetail?id=${id}`;
       this.$http
         .get(url)
         .then(function(rs) {
-          self.times = rs.data.data.map(item => {
+          const list = rs.data.data.map(item => {
             return {
               start: dayjs(item.startTime).format("YYYY/MM/DD"),
               end: dayjs(item.endTime).format("YYYY/MM/DD"),
               ...item
             };
           });
+          self.times = list.slice(0,4);
           // const time = self.times[0];
           self.times.forEach(t => {
             self.getDetail(self.rootId, t);
           });
         })
-        .catch(function(error) {
-          // console.log(error);
-        })
-        .then(function() {
-          // always executed
-        });
     },
-    getDetail(id, t) {
-      //获取某个时间段下的博主信息列表
+    getDetail(id, t) { //获取某个时间段下的 各博主的各类数据（指数粉丝数等）
       const self = this;
       const end = this.getParams({
         page: 1,
@@ -178,8 +178,7 @@ export default {
       });
       return list;
     },
-    getNames({ time, idList, dataList }) {
-      //获取博主名字、个人地址等
+    getNames({ time, idList, dataList }) {//获取博主个人信息：名字、个人地址等
       const self = this;
       const url = `http://tbd.wshang.com/api/daren/listdareninfo?darens=${idList.join(
         ","
@@ -209,7 +208,8 @@ export default {
       });
     },
     transform(dataKv) {
-      //将全部时间段的数据信息进行融合，求平均
+      // 将各时间段的数据信息进行融合、转换
+      // 除去无效数据，有效数据求平均
       let list = [];
       Object.keys(dataKv).map(k => {
         let datas = dataKv[k];
@@ -234,14 +234,7 @@ export default {
       const uniqueItems = Object.keys(idValues).map(id => {
         let values = idValues[id];
         const uniq = values[0];
-        const sums = {
-          商业转化指数: 0,
-          粉丝数: 0,
-          淘指数: 0,
-          粉丝号召指数: 0,
-          内容消费指数: 0,
-          avgScore: 0
-        };
+        const sums = {商业转化指数:0 ,  粉丝数:0 ,  淘指数:0 ,  粉丝号召指数:0 ,  内容消费指数:0 ,  avgScore: 0};
         for (let i = 0; i < values.length; i++) {
           Object.keys(sums).forEach(k => {
             let v = values[i][k];
@@ -255,18 +248,22 @@ export default {
             if (!Number.isNaN(num)) {
               sums[k] += num;
             }
+            values[i][k] = v;
           });
         }
         Object.keys(sums).forEach(k => {
-          let n = parseFloat(sums[k] / values.length).toFixed(1);
-          if (n > 100) {
-            n = ~~n;
+          if (k !== "粉丝数") {
+            let n = parseFloat(sums[k] / values.length).toFixed(1);
+            if (n > 100) {
+              n = ~~n;
+            }
+            uniq[k] = n;
           }
-          uniq[k] = n;
         });
         return uniq;
       });
 
+    console.log('----',uniqueItems)
       this.uniqueDataList = uniqueItems;
       let json2csvParser = new Parser();
       let csv = json2csvParser.parse(uniqueItems);
