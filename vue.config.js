@@ -1,7 +1,7 @@
-const publicPath = process.env.NODE_ENV === 'development'  ? '/' : 'github/' + __dirname.split('/').pop();
-console.log(publicPath)
+// const publicPath = process.env.NODE_ENV === 'development'  ? '/' : 'github/' + __dirname.split('/').pop();
+// console.log(publicPath)
 module.exports = {
-    publicPath: publicPath,
+    publicPath: './',
     devServer: {
         host: 'local.taobao.com', //target host
         port: 80,
